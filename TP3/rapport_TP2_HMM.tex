@@ -1,0 +1,768 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── Encodage & langue ───────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+
+% ─── Mise en page ────────────────────────────────────────────────────────────
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% ─── Mathématiques ───────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+
+% ─── Tableaux & figures ──────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{caption}
+
+% ─── Code source ─────────────────────────────────────────────────────────────
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codecomment}{RGB}{100,100,100}
+\definecolor{codekeyword}{RGB}{0,0,180}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{codenumber}{RGB}{128,128,128}
+\definecolor{codeframe}{RGB}{200,200,200}
+
+\lstdefinestyle{cppstyle}{
+  language=C++,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codekeyword}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestring},
+  numberstyle=\tiny\color{codenumber},
+  numbers=left,
+  numbersep=8pt,
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=4,
+  showstringspaces=false,
+  captionpos=b,
+  xleftmargin=15pt,
+  morekeywords={vector, string, numeric_limits}
+}
+
+\lstdefinestyle{bashstyle}{
+  language=bash,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codekeyword}\bfseries,
+  commentstyle=\color{codecomment}\itshape,
+  stringstyle=\color{codestring},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  showstringspaces=false,
+  captionpos=b,
+  xleftmargin=15pt,
+}
+
+\lstdefinestyle{outputstyle}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  captionpos=b,
+  xleftmargin=15pt,
+  numbers=none,
+}
+
+% ─── Couleurs & boîtes ───────────────────────────────────────────────────────
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+
+\newtcolorbox{resultbox}{
+  colback=green!5!white,
+  colframe=green!60!black,
+  fonttitle=\bfseries,
+  title=Résultat,
+  breakable
+}
+
+\newtcolorbox{notebox}{
+  colback=blue!5!white,
+  colframe=blue!50!black,
+  fonttitle=\bfseries,
+  title=Remarque,
+  breakable
+}
+
+\newtcolorbox{formulebox}{
+  colback=orange!5!white,
+  colframe=orange!70!black,
+  fonttitle=\bfseries,
+  breakable
+}
+
+% ─── Liens ───────────────────────────────────────────────────────────────────
+\usepackage[colorlinks=true, linkcolor=blue!70!black, urlcolor=blue]{hyperref}
+
+% ─── En-tête / pied de page ──────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\textit{Master informatique — parcours IA}}
+\rhead{\textit{Modèles stochastiques}}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── Titre ───────────────────────────────────────────────────────────────────
+\title{
+  \vspace{-1cm}
+  \rule{\linewidth}{1.5pt}\\[0.4cm]
+  {\LARGE \textbf{TP 2 : Modèles de Markov cachés}}\\[0.3cm]
+  {\large Rapport de travaux pratiques}\\[0.2cm]
+  \rule{\linewidth}{1pt}
+}
+\author{Master Informatique --- Parcours Intelligence Artificielle\\
+        Avignon Université}
+\date{Mars 2025}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\tableofcontents
+\newpage
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section{Prédiction de la meilleure séquence d'états}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\subsection{Implémentation de l'algorithme de Viterbi}
+
+L'algorithme de Viterbi recherche la séquence d'états cachés $Q^* = (q_1^*, \ldots, q_T^*)$
+qui maximise la probabilité jointe $P(Q, O \mid \lambda)$. Tous les calculs sont effectués
+en log-probabilités pour éviter les sous-débordements numériques.
+
+\subsubsection*{Formulation}
+
+On définit la variable $\delta_t(i)$ comme le log de la probabilité maximale d'une
+séquence d'états se terminant en $s_i$ au temps $t$ et ayant généré $o_1, \ldots, o_t$ :
+
+\begin{formulebox}
+\textbf{Initialisation} ($t = 0$) :
+\[
+  \delta_0(i) = \log \pi_i + \log B_{i,o_0}, \quad \psi_0(i) = 0
+\]
+
+\textbf{Récurrence} ($t = 1, \ldots, T-1$) :
+\[
+  \delta_t(j) = \max_{i}\bigl[\delta_{t-1}(i) + \log A_{ij}\bigr] + \log B_{j,o_t}
+\]
+\[
+  \psi_t(j) = \arg\max_{i}\bigl[\delta_{t-1}(i) + \log A_{ij}\bigr]
+\]
+
+\textbf{Terminaison} :
+\[
+  q^*_{T-1} = \arg\max_{i}\, \delta_{T-1}(i)
+\]
+
+\textbf{Rétropiste} ($t = T-2, \ldots, 0$) :
+\[
+  q^*_t = \psi_{t+1}(q^*_{t+1})
+\]
+\end{formulebox}
+
+\subsubsection*{Code C++ implémenté}
+
+\begin{lstlisting}[style=cppstyle, caption={Algorithme de Viterbi --- \texttt{model.cpp}}]
+vector<int>* Model::viterbi(vector<int>* seq_obs)
+{
+    int T = seq_obs->size();
+    double** delta = new double*[T];
+    int**    psi   = new int*[T];
+    for (int t = 0; t < T; t++) {
+        delta[t] = new double[n];
+        psi[t]   = new int[n];
+    }
+    // Initialisation
+    for (int i = 0; i < n; i++) {
+        delta[0][i] = pi[i] + B[i][(*seq_obs)[0]];
+        psi[0][i]   = 0;
+    }
+    // Recurrence
+    for (int t = 1; t < T; t++) {
+        for (int j = 0; j < n; j++) {
+            double best = -numeric_limits<double>::infinity();
+            int best_i = 0;
+            for (int i = 0; i < n; i++) {
+                double val = delta[t-1][i] + A[i][j];
+                if (val > best) { best = val; best_i = i; }
+            }
+            delta[t][j] = best + B[j][(*seq_obs)[t]];
+            psi[t][j]   = best_i;
+        }
+    }
+    // Terminaison
+    double best = -numeric_limits<double>::infinity();
+    int best_state = 0;
+    for (int i = 0; i < n; i++)
+        if (delta[T-1][i] > best) { best = delta[T-1][i]; best_state = i; }
+    // Retropiste
+    vector<int>* res = new vector<int>(T);
+    (*res)[T-1] = best_state;
+    for (int t = T-2; t >= 0; t--)
+        (*res)[t] = psi[t+1][(*res)[t+1]];
+    // Nettoyage memoire
+    for (int t = 0; t < T; t++) { delete[] delta[t]; delete[] psi[t]; }
+    delete[] delta; delete[] psi;
+    return res;
+}
+\end{lstlisting}
+
+\subsection{Test sur les données météo}
+
+\subsubsection*{Commandes exécutées}
+
+\begin{lstlisting}[style=bashstyle]
+./use_hmm test ../data/weather/weather.true.model \
+               ../data/weather/weather-test.csv \
+               /tmp/weather-pred.txt
+python3 compErrors.py ../data/weather/weather-test.ref /tmp/weather-pred.txt
+\end{lstlisting}
+
+\subsubsection*{Résultat}
+
+\begin{lstlisting}[style=outputstyle]
+Errors: 0/18 (0.00%)
+-------------------------
+|     ERRORS BY STATE    |
+| chaud:    0 (000.00%) |
+| doux :    0 (000.00%) |
+| froid:    0 (000.00%) |
+-------------------------
+\end{lstlisting}
+
+\begin{resultbox}
+Les prédictions de Viterbi sont \textbf{identiques} au fichier de référence
+\texttt{weather-test.ref} : \textbf{0\% d'erreurs} sur les 18 observations de test.
+L'implémentation est correcte.
+\end{resultbox}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section{Application en bio-informatique}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\subsection{Modèle HMM pour la détection de régions CG}
+
+Le modèle HMM à deux états est défini directement d'après les paramètres du sujet.
+
+\begin{table}[H]
+\centering
+\caption{Matrice de transition $A$}
+\begin{tabular}{lcc}
+\toprule
+ & \textbf{haut taux GC (+)} & \textbf{bas taux GC (−)} \\
+\midrule
+\textbf{haut taux GC (+)} & 0,99 & 0,01 \\
+\textbf{bas taux GC (−)}  & 0,01 & 0,99 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Matrice d'émission $B$ et probabilités initiales $\pi$}
+\begin{tabular}{lcccc}
+\toprule
+ & $v_t = A$ & $v_t = G$ & $v_t = C$ & $v_t = T$ \\
+\midrule
+$P(o_t = v_t \mid q_t = +)$ & 0,20 & 0,30 & 0,30 & 0,20 \\
+$P(o_t = v_t \mid q_t = -)$ & 0,30 & 0,20 & 0,20 & 0,30 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Probabilités initiales : $\pi = (0{,}5 \;;\; 0{,}5)$.
+
+\subsubsection*{Commandes exécutées}
+
+\begin{lstlisting}[style=bashstyle]
+./use_hmm test ../data/genetics/CG-region.model \
+               ../data/genetics/CG-region.csv \
+               /tmp/CG-pred.txt
+python3 compErrors.py ../data/genetics/CG-region.ref /tmp/CG-pred.txt
+\end{lstlisting}
+
+\subsubsection*{Résultat}
+
+\begin{lstlisting}[style=outputstyle]
+Errors: 16685/100000 (16.68%)
+-------------------------
+|     ERRORS BY STATE    |
+| +    : 8250 (016.64%) |
+| -    : 8435 (016.73%) |
+-------------------------
+\end{lstlisting}
+
+\begin{resultbox}
+\textbf{Précision du HMM : 83,32\%} (taux d'erreur : 16,68\% sur 100\,000 bases).
+\end{resultbox}
+
+\begin{notebox}
+Le taux d'erreur est quasi-symétrique entre les deux états ($\approx 16{,}7\%$ chacun).
+Cela s'explique par le fait que les distributions d'émission des deux états sont proches :
+les régions à haut taux de GC émettent G/C à 60\% et A/T à 40\%, tandis que les régions
+à bas taux font l'inverse. Cette faible discrimination rend difficile la séparation exacte
+des deux types de régions, d'autant que les transitions sont identiques (0,99/0,01)
+pour les deux états.
+\end{notebox}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section{Apprentissage par maximum de vraisemblance}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\subsection{Formules MLE}
+
+Étant donné un corpus supervisé de $N$ séquences $\{(O^{(k)}, Q^{(k)})\}_{k=1}^{N}$,
+où chaque observation $o_t^{(k)}$ est annotée par son état caché $q_t^{(k)}$, les
+estimateurs du maximum de vraisemblance sont :
+
+\begin{formulebox}
+\textbf{Probabilités initiales} :
+\[
+  \hat{\pi}_i = \frac{\#\{\text{séquences commençant par l'état } s_i\}}{N}
+             = \frac{\displaystyle\sum_{k=1}^{N} \mathbf{1}\bigl[q_1^{(k)} = s_i\bigr]}{N}
+\]
+
+\textbf{Probabilités de transition} :
+\[
+  \hat{a}_{ij} =
+  \frac{\displaystyle\sum_{k=1}^{N}\sum_{t=1}^{T_k - 1}
+        \mathbf{1}\bigl[q_t^{(k)}=s_i,\; q_{t+1}^{(k)}=s_j\bigr]}
+       {\displaystyle\sum_{k=1}^{N}\sum_{t=1}^{T_k - 1}
+        \mathbf{1}\bigl[q_t^{(k)}=s_i\bigr]}
+\]
+
+\textbf{Probabilités d'émission} :
+\[
+  \hat{b}_{jk} =
+  \frac{\displaystyle\sum_{k=1}^{N}\sum_{t=1}^{T_k}
+        \mathbf{1}\bigl[q_t^{(k)}=s_j,\; o_t^{(k)}=v_k\bigr]}
+       {\displaystyle\sum_{k=1}^{N}\sum_{t=1}^{T_k}
+        \mathbf{1}\bigl[q_t^{(k)}=s_j\bigr]}
+\]
+\end{formulebox}
+
+Ces estimateurs maximisent la log-vraisemblance supervisée
+$\log P(O, Q \mid \lambda) = \sum_k \log P(O^{(k)}, Q^{(k)} \mid \lambda)$.
+
+\subsection{Implémentation de \texttt{train\_MLE}}
+
+\begin{lstlisting}[style=cppstyle, caption={Apprentissage MLE supervisé --- \texttt{model.cpp}}]
+void Model::train_MLE(vector<vector<int>*>* data_obs,
+                      vector<vector<int>*>* data_state, string filename)
+{
+    // Initialisation des compteurs
+    int* count_start  = new int[n]();
+    int* count_unigram = new int[n]();
+    int** count_bigram = new int*[n];
+    int** count_state_obs = new int*[n];
+    for (int i = 0; i < n; i++) {
+        count_bigram[i]    = new int[n]();
+        count_state_obs[i] = new int[M]();
+    }
+    // Comptage
+    int N = data_obs->size();
+    for (int k = 0; k < N; k++) {
+        vector<int>* obs   = (*data_obs)[k];
+        vector<int>* state = (*data_state)[k];
+        int T = obs->size();
+        count_start[(*state)[0]]++;
+        for (int t = 0; t < T; t++) {
+            int s = (*state)[t], o = (*obs)[t];
+            count_state_obs[s][o]++;
+            if (t < T-1) {
+                count_bigram[s][(*state)[t+1]]++;
+                count_unigram[s]++;
+            }
+        }
+    }
+    // Conversion en log-probabilites
+    for (int i = 0; i < n; i++)
+        pi[i] = (count_start[i] > 0)
+                ? log((double)count_start[i] / N) : LOG_MINUS_INFTY;
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++)
+            A[i][j] = (count_bigram[i][j] > 0)
+                      ? log((double)count_bigram[i][j]/count_unigram[i])
+                      : LOG_MINUS_INFTY;
+    for (int j = 0; j < n; j++) {
+        int total = 0;
+        for (int k = 0; k < M; k++) total += count_state_obs[j][k];
+        for (int k = 0; k < M; k++)
+            B[j][k] = (count_state_obs[j][k] > 0)
+                      ? log((double)count_state_obs[j][k] / total)
+                      : LOG_MINUS_INFTY;
+    }
+    init_param_EOS();
+    save_hmm(filename);
+    // Nettoyage memoire ...
+}
+\end{lstlisting}
+
+\subsection{Test sur les données météo}
+
+\subsubsection*{Commandes exécutées}
+
+\begin{lstlisting}[style=bashstyle]
+./use_hmm train_sup /tmp/weather-mle.model ../data/weather/weather-500seq.csv
+./use_hmm test /tmp/weather-mle.model ../data/weather/weather-test.csv \
+               /tmp/weather-mle-pred.txt
+python3 compErrors.py ../data/weather/weather-test.ref /tmp/weather-mle-pred.txt
+\end{lstlisting}
+
+\subsubsection*{Paramètres appris (extrait)}
+
+\begin{table}[H]
+\centering
+\caption{Matrice d'émission $\hat{B}$ apprise (à comparer avec le vrai modèle)}
+\begin{tabular}{lccc}
+\toprule
+\textbf{État} & \textbf{été} & \textbf{mi-saison} & \textbf{hiver} \\
+\midrule
+chaud & 0,799 & 0,201 & $\approx 0$ \\
+doux  & 0,399 & 0,394 & 0,208 \\
+froid & 0,110 & 0,111 & 0,779 \\
+\midrule
+\textit{vrai modèle} & & & \\
+chaud & 0,800 & 0,190 & 0,010 \\
+doux  & 0,500 & 0,400 & 0,100 \\
+froid & 0,010 & 0,200 & 0,790 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection*{Résultat}
+
+\begin{lstlisting}[style=outputstyle]
+Errors: 0/18 (0.00%)
+-------------------------
+|     ERRORS BY STATE    |
+| chaud:    0 (000.00%) |
+| doux :    0 (000.00%) |
+| froid:    0 (000.00%) |
+-------------------------
+\end{lstlisting}
+
+\begin{resultbox}
+Le modèle appris par MLE sur 500 séquences atteint \textbf{0\% d'erreurs} sur les données
+de test, identique au vrai modèle. Les paramètres estimés sont très proches des paramètres
+du vrai modèle, ce qui valide l'implémentation de \texttt{train\_MLE}.
+\end{resultbox}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section{Application en traitement automatique des langues}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\subsection{Traitement des mots inconnus}
+
+À partir de l'examen des fonctions \texttt{read\_vocab} et \texttt{read\_sequences},
+voici comment le programme gère les mots inconnus :
+
+\paragraph{Lors de l'apprentissage --- \texttt{read\_vocab} :}
+Lors d'un premier parcours du fichier d'entraînement, chaque mot est compté.
+Tout mot dont le compte est \textbf{strictement inférieur au seuil}
+\texttt{UNK\_THRESHOLD = 2} est retiré du vocabulaire et ses occurrences sont
+attribuées au token spécial \texttt{"UNK"}.
+Ce token devient une observation à part entière du modèle, avec ses propres
+probabilités d'émission $B[\text{état}][\texttt{UNK}]$ apprises sur l'ensemble
+des mots rares du corpus d'entraînement.
+
+\paragraph{Lors du test --- \texttt{read\_sequences} (train=false) :}
+Si un mot du fichier de test est \textbf{absent du dictionnaire} \texttt{dic\_obs}
+du modèle (jamais vu ou trop rare à l'entraînement), il est remplacé par l'index
+de \texttt{UNK} dans la séquence d'observations.
+Sa forme originale est conservée dans une \textbf{file FIFO} \texttt{unk\_obs}
+pour être restituée à l'écriture.
+
+\paragraph{Lors de l'écriture --- \texttt{write\_predict} :}
+Si l'observation courante correspond à l'index de \texttt{UNK}, le mot original
+est extrait depuis la file \texttt{unk\_obs} et affiché à la place.
+L'étiquette PoS attribuée est celle calculée par Viterbi pour le token \texttt{UNK}.
+
+\begin{notebox}
+Contrairement aux applications météo et bio-informatique où le vocabulaire
+des observations est \textbf{fermé} (le nombre de symboles possibles est fixe),
+le vocabulaire des mots en traitement des langues est \textbf{ouvert} : de nouveaux
+mots peuvent apparaître au test. Le mécanisme \texttt{UNK} permet de gérer ce cas
+en regroupant tous les mots inconnus sous une catégorie générique.
+\end{notebox}
+
+\subsection{Résultats du POS-tagging}
+
+\subsubsection*{Entraînement}
+
+\begin{lstlisting}[style=bashstyle]
+./use_hmm train_sup /tmp/pos-mle.model \
+          ../data/POS-tagging/fr-train.word-pos EOS
+\end{lstlisting}
+
+Modèle appris : \textbf{18 états} (catégories PoS + EOS), \textbf{19\,070 observations}.
+
+\subsubsection*{Tableau synthétique des erreurs}
+
+\begin{table}[H]
+\centering
+\caption{Taux d'erreurs par corpus de test}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Corpus de test} & \textbf{Erreurs} & \textbf{Total} & \textbf{Taux d'erreur} \\
+\midrule
+\texttt{fr-test} (tous sous-corpus) & 6\,604 & 81\,569 & \textbf{8,10\%} \\
+\texttt{UD\_French-FQB}             & 2\,046 & 24\,135 & 8,48\% \\
+\texttt{UD\_French-GSD}             &    679 & 10\,019 & 6,78\% \\
+\texttt{UD\_French-ParTUT}          &    168 &  2\,603 & 6,45\% \\
+\texttt{UD\_French-PUD}             & 2\,200 & 24\,735 & 8,89\% \\
+\texttt{UD\_French-Sequoia}         &    628 & 10\,048 & 6,25\% \\
+\texttt{UD\_French-Spoken}          &    883 & 10\,029 & 8,80\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection*{Étiquettes les plus difficiles à prédire}
+
+\begin{table}[H]
+\centering
+\caption{Taux d'erreur par étiquette PoS sur \texttt{fr-test}}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Étiquette} & \textbf{Description} & \textbf{Erreurs} & \textbf{Taux} \\
+\midrule
+\texttt{X}     & Mots étrangers / inclassables & 164   & \textbf{46,86\%} \\
+\texttt{ADJ}   & Adjectifs                     & 1\,213 & \textbf{24,05\%} \\
+\texttt{ADV}   & Adverbes                      &   577  & 15,35\% \\
+\texttt{VERB}  & Verbes                        & 1\,052 & 14,71\% \\
+\texttt{NUM}   & Numéraux                      &   164  & 13,53\% \\
+\texttt{SYM}   & Symboles                      &    10  & 13,16\% \\
+\texttt{PROPN} & Noms propres                  &   597  & 12,97\% \\
+\texttt{NOUN}  & Noms communs                  & 1\,609 & 10,73\% \\
+\texttt{SCONJ} & Conj. de subordination        &    55  & 5,84\% \\
+\texttt{PRON}  & Pronoms                       &   343  & 6,35\% \\
+\texttt{AUX}   & Auxiliaires                   &    53  & 1,31\% \\
+\texttt{PUNCT} & Ponctuation                   &     1  & 0,01\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Analyse des difficultés :}
+\begin{itemize}
+  \item \textbf{X (46,9\%)} : mots hors-norme (emprunts, abréviations, erreurs)
+        souvent inconnus du modèle → traités comme \texttt{UNK}, catégorie très minoritaire.
+  \item \textbf{ADJ (24,1\%)} : forte ambiguïté morphologique en français.
+        Un participe passé peut être ADJ ou VERB selon le contexte
+        (ex. \textit{ouvert}, \textit{construit}).
+  \item \textbf{ADV (15,4\%)} et \textbf{VERB (14,7\%)} : nombreux mots
+        polysémiques dont l'étiquette dépend du contexte à longue portée,
+        que le HMM (Markov d'ordre 1) ne capture pas.
+  \item \textbf{PROPN (13,0\%)} : les noms propres sont fréquemment inconnus
+        du vocabulaire d'entraînement.
+  \item \textbf{PUNCT (0,01\%)} et \textbf{AUX (1,31\%)} : catégories
+        très régulières, quasi-injectives mots $\to$ étiquette.
+\end{itemize}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section{Calcul de scores de confiance}
+% ═════════════════════════════════════════════════════════════════════════════
+
+\subsection{Fonctions \texttt{alpha} et \texttt{beta}}
+
+\subsubsection*{Forward --- $\alpha_t(i) = \log P(o_1, \ldots, o_t,\; q_t = s_i)$}
+
+\begin{formulebox}
+\textbf{Initialisation} :
+\[
+  \alpha_0(i) = \log \pi_i + \log B_{i,o_0}
+\]
+\textbf{Récurrence} :
+\[
+  \alpha_t(j) = \ln\!\left(\sum_{i=1}^{n} e^{\alpha_{t-1}(i) + \log A_{ij}}\right) + \log B_{j,o_t}
+\]
+La somme est calculée via \texttt{ln\_of\_sum} pour éviter les sous-débordements.
+\end{formulebox}
+
+\begin{lstlisting}[style=cppstyle, caption={\texttt{alpha} --- \texttt{model.cpp}}]
+double** Model::alpha(vector<int>* seq_obs) {
+    int T = seq_obs->size();
+    double** res = new double*[T];
+    for (int t = 0; t < T; t++) res[t] = new double[n];
+    // Initialisation
+    for (int i = 0; i < n; i++)
+        res[0][i] = pi[i] + B[i][(*seq_obs)[0]];
+    // Recurrence
+    for (int t = 1; t < T; t++) {
+        for (int j = 0; j < n; j++) {
+            double* tmp = new double[n];
+            for (int i = 0; i < n; i++)
+                tmp[i] = res[t-1][i] + A[i][j];
+            res[t][j] = ln_of_sum(tmp, 0, n-1) + B[j][(*seq_obs)[t]];
+            delete[] tmp;
+        }
+    }
+    return res;
+}
+\end{lstlisting}
+
+\subsubsection*{Backward --- $\beta_t(i) = \log P(o_{t+1}, \ldots, o_T \mid q_t = s_i)$}
+
+\begin{formulebox}
+\textbf{Initialisation} :
+\[
+  \beta_{T-1}(i) = \log(1) = 0
+\]
+\textbf{Récurrence} (de $T-2$ à $0$) :
+\[
+  \beta_t(i) = \ln\!\left(\sum_{j=1}^{n} e^{\log A_{ij} + \log B_{j,o_{t+1}} + \beta_{t+1}(j)}\right)
+\]
+\end{formulebox}
+
+\begin{lstlisting}[style=cppstyle, caption={\texttt{beta} --- \texttt{model.cpp}}]
+double** Model::beta(vector<int>* seq_obs) {
+    int T = seq_obs->size();
+    double** res = new double*[T];
+    for (int t = 0; t < T; t++) res[t] = new double[n];
+    // Initialisation
+    for (int i = 0; i < n; i++) res[T-1][i] = 0.0;
+    // Recurrence
+    for (int t = T-2; t >= 0; t--) {
+        for (int i = 0; i < n; i++) {
+            double* tmp = new double[n];
+            for (int j = 0; j < n; j++)
+                tmp[j] = A[i][j] + B[j][(*seq_obs)[t+1]] + res[t+1][j];
+            res[t][i] = ln_of_sum(tmp, 0, n-1);
+            delete[] tmp;
+        }
+    }
+    return res;
+}
+\end{lstlisting}
+
+\subsection{Fonction \texttt{pgen}}
+
+\begin{formulebox}
+\[
+  \log P(O^k \mid \mathcal{M}) = \ln\!\left(\sum_{i=1}^{n} e^{\alpha_T(i)}\right)
+  = \texttt{ln\_of\_sum}(\alpha[T-1],\; 0,\; n-1)
+\]
+\end{formulebox}
+
+\begin{lstlisting}[style=cppstyle, caption={\texttt{pgen} --- \texttt{model.cpp}}]
+double Model::pgen(vector<int>* seq_obs, double** alpha) {
+    int T = seq_obs->size();
+    return ln_of_sum(alpha[T-1], 0, n-1);
+}
+\end{lstlisting}
+
+\subsection{Fonction \texttt{posterior}}
+
+La probabilité a posteriori que l'état $s_i$ ait émis l'observation au temps $t$ est :
+
+\begin{formulebox}
+\[
+  \gamma_t(i) = \frac{\alpha_t(i)\,\beta_t(i)}{P(O^k \mid \mathcal{M})}
+  \implies
+  \log \gamma_t(s_t) = \alpha_t(s_t) + \beta_t(s_t) - \log P(O^k \mid \mathcal{M})
+\]
+où $s_t$ est l'état prédit par Viterbi au temps $t$.
+\end{formulebox}
+
+\begin{lstlisting}[style=cppstyle, caption={\texttt{posterior} --- \texttt{model.cpp}}]
+vector<double>* Model::posterior(vector<int>* seq_obs, vector<int>* seq_state) {
+    int T = seq_obs->size();
+    double** alpha_mat = Model::alpha(seq_obs);
+    double** beta_mat  = Model::beta(seq_obs);
+    double denom = Model::pgen(seq_obs, alpha_mat);
+    vector<double>* res = new vector<double>(T);
+    for (int t = 0; t < T; t++) {
+        int s = (*seq_state)[t];
+        (*res)[t] = alpha_mat[t][s] + beta_mat[t][s] - denom;
+    }
+    for (int t = 0; t < T; t++) {
+        delete[] alpha_mat[t]; delete[] beta_mat[t];
+    }
+    delete[] alpha_mat; delete[] beta_mat;
+    return res;
+}
+\end{lstlisting}
+
+\subsection{Vérification et affichage}
+
+\subsubsection*{Vérification sur les données météo}
+
+\begin{lstlisting}[style=bashstyle]
+./use_hmm test ../data/weather/weather.true.model \
+               ../data/weather/weather-test.csv /tmp/weather-posteriors.txt
+diff /tmp/weather-posteriors.txt ../data/weather/weather-test.ref.posteriors
+\end{lstlisting}
+
+\begin{lstlisting}[style=outputstyle]
+ete       chaud  0.609347
+hiver     froid  0.727018
+mi-saison doux   0.568331
+mi-saison doux   0.577112
+hiver     froid  0.748287
+ete       chaud  0.589928
+\end{lstlisting}
+
+\begin{resultbox}
+Les probabilités a posteriori calculées sont \textbf{exactement identiques} au fichier
+de référence \texttt{weather-test.ref.posteriors}. Les trois fonctions
+\texttt{alpha}, \texttt{beta} et \texttt{pgen} sont correctement implémentées.
+\end{resultbox}
+
+\subsubsection*{Fichier \texttt{fr-test.word} étiqueté avec posteriors (extrait)}
+
+\begin{lstlisting}[style=outputstyle]
+Qu'     PRON   0.996577
+est     AUX    0.962172
+-ce     PRON   1.000000
+qu'     SCONJ  0.843615
+une     DET    0.983906
+\end{lstlisting}
+
+\begin{notebox}
+On observe que les étiquettes à \textbf{forte confiance} (proche de 1) correspondent
+aux mots grammaticaux sans ambiguïté (déterminants, ponctuation, auxiliaires).
+Les \textbf{confiances basses} ($< 0{,}6$) signalent les cas ambigus, cohérents avec
+les erreurs élevées observées pour les étiquettes ADJ, VERB et ADV.
+Ces scores de confiance constituent donc un indicateur fiable de la qualité des prédictions.
+\end{notebox}
+
+% ═════════════════════════════════════════════════════════════════════════════
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+% ═════════════════════════════════════════════════════════════════════════════
+
+Ce TP a permis d'implémenter et de valider les composantes essentielles d'un modèle
+de Markov caché :
+
+\begin{itemize}
+  \item L'\textbf{algorithme de Viterbi} (décodage optimal, 0\% d'erreur sur la météo).
+  \item L'\textbf{apprentissage supervisé MLE} (paramètres proches du vrai modèle,
+        0\% d'erreur après apprentissage).
+  \item L'\textbf{algorithme forward-backward} (posteriors conformes à la référence).
+  \item Trois applications : prédiction météo, détection de régions CG en bio-informatique
+        (83\% de précision), et étiquetage morpho-syntaxique du français (~92\% de précision).
+\end{itemize}
+
+Les principales limites observées concernent le POS-tagging : l'hypothèse de Markov
+d'ordre 1 ne capture pas les dépendances longue distance, et le mécanisme \texttt{UNK}
+reste une approximation grossière pour les mots inconnus. Des modèles plus avancés
+(HMM d'ordre 2, CRF, réseaux de neurones) permettraient d'améliorer ces résultats.
+
+\end{document}

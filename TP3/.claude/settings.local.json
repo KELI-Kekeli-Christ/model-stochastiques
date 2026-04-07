@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make)",
+      "Bash(./use_hmm test:*)",
+      "Bash(python3 \"/home/christ/Downloads/Telegram Desktop/M1/M1 Avignon universite/model stochastique/TP/TP3/src/compErrors.py\" \"../data/weather/weather-test.ref\" \"/tmp/weather-test-pred.txt\")",
+      "Bash(python3 compErrors.py ../data/weather/weather-test.ref /tmp/weather-test-mle-pred.txt)",
+      "Bash(./use_hmm train_sup /tmp/pos-mle.model \"../data/POS-tagging/fr-train.word-pos\" EOS)"
+    ]
+  }
+}
